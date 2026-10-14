@@ -50,38 +50,39 @@ flowchart LR
 The user clicks **Run** to start the workflow. The automation prepares a first-pass review; the approver inspects findings and evidence before deciding.
 
 ```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 18, "rankSpacing": 22, "diagramPadding": 4}, "themeVariables": {"fontSize": "12px"}}}%%
 flowchart TD
-    START((Start)) --> BEGIN[User clicks Run to start the bot]
-    BEGIN --> COLLECT[Collect pending PO records and supporting documents]
+    START([Start]) --> BEGIN[User clicks Run]
+    BEGIN --> COLLECT[Collect pending POs and documents]
 
     subgraph EXTRACTION["1. Document extraction"]
         direction TB
-        EXT_RULES[Filter active extraction rules] --> EXT_PROMPT[Add rules to extraction prompt]
-        EXT_PROMPT --> EXT_LLM[LLM: extract document content]
-        EXT_LLM --> EXT_VALIDATE[Validate structured extraction]
+        EXT_RULES[Select active extraction rules] --> EXT_PROMPT[Add rules to extraction prompt]
+        EXT_PROMPT --> EXT_LLM[LLM extracts document data]
+        EXT_LLM --> EXT_VALIDATE[Validate extraction]
     end
     COLLECT --> EXT_RULES
 
     subgraph DOC_AUDIT["2. PO-level review"]
         direction TB
-        DOC_RULES[Filter active PO-level rules] --> DOC_PROMPT[Add rules to PO-level prompt]
-        DOC_PROMPT --> DOC_LLM[LLM: review overall PO terms]
-        DOC_LLM --> DOC_VALIDATE[Validate results and identify relevant evidence]
+        DOC_RULES[Select active PO-level rules] --> DOC_PROMPT[Add rules to PO-level prompt]
+        DOC_PROMPT --> DOC_LLM[LLM reviews PO terms]
+        DOC_LLM --> DOC_VALIDATE[Validate results and select evidence]
     end
     EXT_VALIDATE --> DOC_RULES
 
     subgraph ITEM_AUDIT["3. Line-item review"]
         direction TB
-        ITEM_RULES[Filter active line-item rules] --> ITEM_PROMPT[Add rules to line-item prompt]
-        ITEM_PROMPT --> ITEM_LLM[LLM: compare PO items with evidence]
-        ITEM_LLM --> ITEM_VALIDATE[Validate structured results]
+        ITEM_RULES[Select active line-item rules] --> ITEM_PROMPT[Add rules to line-item prompt]
+        ITEM_PROMPT --> ITEM_LLM[LLM compares PO line items]
+        ITEM_LLM --> ITEM_VALIDATE[Validate results]
     end
     DOC_VALIDATE --> ITEM_RULES
 
     ITEM_VALIDATE --> REPORT[Build summary and detailed report]
-    REPORT --> REVIEW[Approver reviews findings and source evidence]
-    REVIEW --> DECISION[Human makes the final decision]
-    DECISION --> FINISH((End))
+    REPORT --> REVIEW[Approver reviews findings and evidence]
+    REVIEW --> DECISION[Human makes final decision]
+    DECISION --> FINISH([End])
 
     FEEDBACK[Human-maintained feedback rule register] -.-> EXT_RULES
     FEEDBACK -.-> DOC_RULES
@@ -95,7 +96,7 @@ flowchart TD
     class START,FINISH boundary
 ```
 
-**Legend:** Orange outline = human action or human-maintained input; blue outline = automated step; gray outline = process boundary.
+**Legend:** Orange outline = human action/input; blue outline = automated step; gray rounded capsule = process start/end. Compact spacing and shorter labels keep the diagram easier to scan.
 
 | Stage | What happens | Result passed forward |
 |---|---|---|
