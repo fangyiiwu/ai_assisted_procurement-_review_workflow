@@ -1,8 +1,8 @@
 # AI-Assisted Procurement Review
 
-> **An anonymized case study in turning repetitive document checks into structured, evidence-linked decision support—with a human retaining control.**
+> **Core outcome: a traffic-light review report (🟢 no discrepancy flagged / 🔴 review required) is designed to help senior approvers make informed decisions with less administrative cross-checking—while final judgment remains human.**
 >
-> A user-triggered Python workflow gathers purchase-order (PO) records and supporting documents, uses an LLM to extract and compare information, and presents potential exceptions to an approver. The AI prepares the review; it does not approve or reject transactions.
+> An anonymized case study of a user-triggered Python workflow that uses an LLM to compare PO records with supporting documents and presents 🟢 / 🔴 findings with cited evidence. **Senior approvers** are leaders with approval authority.
 
 ## Contents
 
@@ -24,10 +24,19 @@
 
 ## Executive Summary
 
-- **Problem:** An approver needed to compare PO fields with information spread across supporting documents. Manually opening and cross-checking records created administrative work and made it harder to focus on exceptions.
-- **Approach:** Automate data collection, use three category-specific LLM steps for document extraction, PO-level checks, and line-item checks, then consolidate results and source references into a report.
-- **Business intent:** Make the review more consistent and direct attention to potential discrepancies while preserving human judgment and accountability.
-- **Observed adoption:** The workflow ran **290 times in its first six months**; a typical run covered **1–4 POs**. The user described the report as helpful. No time-saving, accuracy, or ROI improvement has been measured.
+### Business context and challenge
+
+- **Approval context:** Enterprise POs typically pass through internal checkpoints before purchase release. Senior decision-makers need confidence that key commercial details are supported by the PO record and its evidence.
+- **Review challenge:** Much of the review involves administrative, field-by-field reconciliation—checking quantities, prices, totals, and terms across the PO and its supporting documents. The challenge is that this transactional checking draws attention away from the approver's higher-level judgment: assessing exceptions and making the business approval decision.
+
+### Solution and intended value
+
+- **Solution:** A user-triggered Python workflow automates evidence collection and first-pass matching through three category-specific LLM steps. It consolidates 🟢 / 🔴 statuses, exceptions, and source references in a review report.
+- **Intended value:** The report shifts the approver's starting point from raw information to an organized assessment, aiming to reduce administrative burden and focus attention on exceptions.
+
+### Adoption and my contribution
+
+- **Observed adoption:** The workflow ran **290 times in its first six months**, typically covering **1–4 POs per run**. The user described the report as helpful.
 - **My contribution:** I implemented and delivered the initial manager-defined concept. After launch, I independently identified, designed, and implemented a governed feedback-to-prompt mechanism for recurring exceptions, with project-PM review.
 
 ## Business Process: As-Is to To-Be
@@ -46,8 +55,6 @@ flowchart LR
 ```
 
 ### To-Be — Automated preparation, human decision
-
-The user clicks **Run** to start the workflow. The automation prepares a first-pass review; the approver inspects findings and evidence before deciding.
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 18, "rankSpacing": 22, "diagramPadding": 4}, "themeVariables": {"fontSize": "12px"}}}%%
@@ -96,7 +103,7 @@ flowchart TD
     class START,FINISH boundary
 ```
 
-**Legend:** Orange outline = human action/input; blue outline = automated step; gray rounded capsule = process start/end. Compact spacing and shorter labels keep the diagram easier to scan.
+**Legend:** Orange = human action/input; blue = automated step; gray = start/end.
 
 | Stage | What happens | Result passed forward |
 |---|---|---|
@@ -104,19 +111,15 @@ flowchart TD
 | PO-level review | Apply matching active rules; review overall terms such as payment terms and warranty, and identify relevant evidence. | PO-level checks and selected evidence context. |
 | Line-item review | Apply matching active rules; compare PO line items with the selected evidence. | Item-level checks and comparison details. |
 
-During workflow setup, active feedback rules are filtered by category and added to the corresponding prompt. Each LLM action receives only the guidance relevant to its category. The workflow then assembles the stage results into one report.
-
 ## Business Value and Evidence
 
-The design is intended to reduce repetitive document searching and give the approver a more consistent, traceable first-pass review. The report brings together review status, differences, comments, and source-document references. This helps the user move from a batch-level overview to the specific evidence behind a potential exception.
+The value proposition is **decision-maker leverage**: evidence gathering and first-pass comparison are prepared before the report reaches the approver, who can start with 🟢 / 🔴 statuses, potential exceptions, and cited evidence rather than assembling comparisons from raw records.
 
-**What has been observed:** 290 workflow runs in the first six months, typically processing 1–4 POs per run; the user said the report was helpful.
-
-**What has not been established:** There is no before/after cycle-time study, measured accuracy or false-positive rate, or validated financial benefit. Usage demonstrates adoption, not quantified value realization.
+**Evidence and limits:** Usage and positive user feedback indicate adoption and perceived usefulness—not time saved, improved accuracy, fewer control incidents, or financial return. No before/after measurement was conducted.
 
 ### Measures for a future improvement phase
 
-If the process owner wanted to quantify value, I would agree on definitions and data ownership first, then establish a baseline and track measures such as:
+To quantify value in a future phase, first agree KPI definitions and data ownership with the process owner, establish a baseline, and then track:
 
 | Candidate measure | Example definition |
 |---|---|
@@ -125,13 +128,11 @@ If the process owner wanted to quantify value, I would agree on definitions and 
 | Finding quality | Share of AI-flagged checks confirmed, corrected, or dismissed by the human reviewer. |
 | Evidence coverage | Share of reviewed POs with required checks and traceable source evidence. |
 
-These are proposed measures—not metrics currently captured or results achieved.
+These are proposed measures, not current metrics or achieved results.
 
 ## Exception Feedback: Governed Prompt Updates
 
-After launch, recurring business exceptions led to repeated prompt edits. I designed a lightweight alternative: keep stable prompt content separate from a rule register, then use category and status to determine which reviewed guidance is supplied to each LLM step.
-
-At workflow setup, the program loads the feedback rules, includes only rules marked **Active**, and routes them by category to document extraction, PO-level review, or line-item review. **Draft** rules remain out of the prompts. The mechanism is human-curated; it does not automatically learn from arbitrary feedback.
+After launch, recurring exceptions made repeated prompt edits cumbersome. I designed a separate rule register: at workflow setup, the program loads **Active** rules and routes each by category to document extraction, PO-level review, or line-item review; **Draft** rules are excluded. The mechanism is human-curated, not autonomous learning.
 
 ### Synthetic example of the rule register
 
@@ -141,18 +142,17 @@ The examples below are fictional and illustrate the management design only; they
 |---|---|---|---|
 | Document extraction | “The scan is faint. Please do not guess unreadable values.” | Mark values that cannot be read confidently as unavailable and surface them for human review. | 🟢 Active |
 | PO-level review | “A quote may list an optional service separately from the goods.” | Do not include a clearly optional fee in a required-total comparison unless the PO includes it. | 🟢 Active |
-| Line-item review | “The short product name differs, but the model identifier matches.” | Use an exact model identifier as matching evidence when available; flag conflicting identifiers. | 🟡 Draft |
+| Line-item review | “The short product name differs, but the model identifier matches.” | Use an exact model identifier as matching evidence when available; flag conflicting identifiers. | Draft |
 
 I considered vector retrieval, but the observed rule volume was small enough to include relevant active guidance directly in the prompts. This workflow does not use embeddings or vector search.
 
 ## LLM Harness and Review Output
 
-The goal of the LLM harness is to make responses more predictable and usable by downstream code—not to claim that schema validation prevents hallucinations or guarantees correct decisions.
+The harness constrains response shape and normalizes fields for downstream reporting. It cannot establish factual correctness, so source evidence and human review remain necessary.
 
 - **Pydantic** models define required fields, nested audit checkpoints, and permitted status values.
 - **Instructor** requests responses using those models.
 - Validators normalize selected values, while application code assembles report rows from named checkpoints.
-- Evidence references and human review provide context that a valid structure alone cannot establish.
 
 Illustrative example only; this is not production code:
 
@@ -184,14 +184,14 @@ report = instructor_client.chat.completions.create(
 
 ### Synthetic example of the generated report
 
-All identifiers, values, comments, and filenames below are invented for illustration. Green summary fields are intentionally blank; red summaries show the compared values directly.
+All identifiers, values, comments, and filenames below are invented for illustration. The review result is binary: 🟢 no discrepancy flagged or 🔴 review finding. 🟢 summary cells are intentionally blank; 🔴 summaries show the compared values directly.
 
 #### Summary view
 
-| PO record *(synthetic)* | Workflow status | PO-level review | PO-level summary | Line-item review | Line-item summary | Source evidence *(synthetic)* |
-|---|---|---|---|---|---|---|
-| PO-DEMO-001 | 🟡 Pending human review | 🟢 |  | 🔴 | Item 2 tax rate: PO 8% vs. attachment 10%. | demo-quote-revB.pdf |
-| PO-DEMO-002 | 🟡 Pending human review | 🔴 | Payment terms: PO Net 30 vs. attachment Net 45. | 🟢 |  | demo-quote-v2.pdf |
+| PO record *(synthetic)* | PO-level status | PO-level summary | Line-item status | Line-item summary | Source evidence *(synthetic)* |
+|---|---|---|---|---|---|
+| PO-DEMO-001 | 🟢 |  | 🔴 | Item 2 tax rate: PO 8% vs. attachment 10%. | demo-quote-revB.pdf |
+| PO-DEMO-002 | 🔴 | Payment terms: PO Net 30 vs. attachment Net 45. | 🟢 |  | demo-quote-v2.pdf |
 
 #### Detailed comparison view
 
@@ -202,7 +202,7 @@ All identifiers, values, comments, and filenames below are invented for illustra
 | PO-DEMO-002 | PO-level | Payment terms | Net 30 | Net 45 | 🔴 Difference | Review the terms and any later supporting evidence. | demo-quote-v2.pdf |
 | PO-DEMO-002 | PO-level | Warranty period | 12 months | 12 months | 🟢 Match | Values agree in the cited document. | demo-quote-v2.pdf |
 
-The intended review sequence is: scan the summary, inspect red findings in the detailed view, follow the source reference, and make the final decision. A green result is not an approval; a red result may also need contextual review because the model can be overly strict.
+Reviewers scan the summary, inspect 🔴 findings and cited sources, then make the decision. 🟢 is not approval, and 🔴 findings may need context because the model can be overly strict.
 
 ## My Role and Technology
 
@@ -217,7 +217,6 @@ Python · Playwright · Google Gemini (`google-genai`) · Instructor · Pydantic
 
 ## Scope, Limitations, and Privacy
 
-- This is an AI-assisted PO review workflow, not an autonomous approval system or an end-to-end process-mining implementation.
-- It does not claim measured cycle-time savings, error-rate improvement, or ROI.
-- Structured outputs improve consistency of format; they do not guarantee factual correctness. Human review remains necessary.
+- This is AI-assisted PO review, not autonomous approval or end-to-end process mining.
+- No cycle-time savings, accuracy improvement, or ROI has been measured.
 - This portfolio case is anonymized. Company names, internal system identifiers, credentials, real prompts, transaction data, and proprietary rules are omitted. All examples are synthetic, and the code snippet is newly written for illustration.
