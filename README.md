@@ -1,89 +1,159 @@
 # AI-Assisted Procurement Review
 
-> **An anonymized portfolio case study in LLM orchestration, structured output validation, and human-in-the-loop decision support.**
+> **An anonymized case study in turning repetitive document checks into structured, evidence-linked decision support—with a human retaining control.**
 >
-> I implemented an AI-assisted workflow that gathers purchase-order (PO) data and supporting documents, checks key fields against that evidence, and presents a review report to an executive approver. The AI provides an initial assessment; a person retains the final approval decision.
+> A user-triggered Python workflow gathers purchase-order (PO) records and supporting documents, uses an LLM to extract and compare information, and presents potential exceptions to an approver. The AI prepares the review; it does not approve or reject transactions.
+
+## Contents
+
+- **Business case — why it matters**
+    - [Executive Summary](#executive-summary)
+    - [Business Process: As-Is to To-Be](#business-process-as-is-to-to-be)
+    - [Business Value and Evidence](#business-value-and-evidence)
+        - [Measures for a future improvement phase](#measures-for-a-future-improvement-phase)
+- **Solution design — how it works**
+    - [Exception Feedback: Governed Prompt Updates](#exception-feedback-governed-prompt-updates)
+        - [Synthetic example of the rule register](#synthetic-example-of-the-rule-register)
+    - [LLM Harness and Review Output](#llm-harness-and-review-output)
+        - [Synthetic example of the generated report](#synthetic-example-of-the-generated-report)
+        - [Summary view](#summary-view)
+        - [Detailed comparison view](#detailed-comparison-view)
+- **Delivery and trust — who did what, and what to know**
+    - [My Role and Technology](#my-role-and-technology)
+    - [Scope, Limitations, and Privacy](#scope-limitations-and-privacy)
 
 ## Executive Summary
 
-- **Business problem — As-Is:** An executive approver needed to review PO data alongside supporting documents. Manually locating and comparing information across records created administrative effort and made it harder to focus attention on exceptions.
-- **Solution — To-Be:** A user-triggered Python workflow collects pending PO data and attachments, uses Gemini to extract and compare information, constrains the response shape with Instructor and Pydantic, then generates a consolidated, evidence-oriented report.
-- **Business value:** The approver receives a consistent first-pass review with highlighted exceptions and source references. The workflow supports—not replaces—human judgment; AI findings are not automatic approvals.
-- **Operational signal:** In approximately the first six months after deployment, observed use averaged about **1–2 runs per day**, typically covering **1–3 POs per run**. The end user described the report as helpful. These are operational observations, not a measured time-saving, accuracy, or ROI study.
+- **Problem:** An approver needed to compare PO fields with information spread across supporting documents. Manually opening and cross-checking records created administrative work and made it harder to focus on exceptions.
+- **Approach:** Automate data collection, use three category-specific LLM steps for document extraction, PO-level checks, and line-item checks, then consolidate results and source references into a report.
+- **Business intent:** Make the review more consistent and direct attention to potential discrepancies while preserving human judgment and accountability.
+- **Observed adoption:** The workflow ran **290 times in its first six months**; a typical run covered **1–4 POs**. The user described the report as helpful. No time-saving, accuracy, or ROI improvement has been measured.
+- **My contribution:** I implemented and delivered the initial manager-defined concept. After launch, I independently identified, designed, and implemented a governed feedback-to-prompt mechanism for recurring exceptions, with project-PM review.
 
-## Business Context
+## Business Process: As-Is to To-Be
 
-The intended user is a senior approver reviewing purchase orders before deciding whether to proceed. The task requires comparing system records with evidence in attached documents, such as quoted items, quantities, prices, and commercial terms.
-
-The goal was not to delegate approval to AI. It was to prepare a consistent first-pass review, organize relevant evidence, and direct the approver's attention to potential discrepancies. Early use also surfaced cases where the model was too strict and flagged acceptable information. That feedback reinforced the need for a human decision-maker and an iterative way to handle recurring exceptions.
-
-## Process: As-Is vs. To-Be
-
-### As-Is — Manual review
+### As-Is — Manual comparison
 
 ```mermaid
 flowchart LR
-    A[Pending PO] --> B[Open PO record]
-    B --> C[Find and open supporting attachments]
+    S((Start)) --> A[Pending PO]
+    A --> B[Open PO record]
+    B --> C[Find and open supporting documents]
     C --> D[Manually compare fields and terms]
     D --> E[Approver interprets findings]
     E --> F[Make approval decision]
+    F --> Z((End))
 ```
 
-### To-Be — Evidence-oriented review assistance
+### To-Be — Automated preparation, human decision
+
+The user clicks **Run** to start the workflow. The automation prepares a first-pass review; the approver inspects findings and evidence before deciding.
 
 ```mermaid
-flowchart LR
-    A[User starts a review] --> B[Collect pending PO data and attachments]
-    B --> C[Extract document information with Gemini]
-    C --> D[Validate structured response with Instructor and Pydantic]
-    D --> E[Compare PO values with document evidence]
-    E --> F[Build a consolidated report with status, differences, and sources]
-    F --> G[Approver reviews findings and evidence]
-    G --> H[Human makes the final decision]
+flowchart TD
+    START((Start)) --> BEGIN[User clicks Run to start the bot]
+    BEGIN --> COLLECT[Collect pending PO records and supporting documents]
 
-    R[Human-curated exception rules] --> S[Filter by active status and audit category]
-    S --> T[Add applicable rules to the relevant system prompt]
-    T --> C
+    subgraph EXTRACTION["1. Document extraction"]
+        direction TB
+        EXT_RULES[Filter active extraction rules] --> EXT_PROMPT[Add rules to extraction prompt]
+        EXT_PROMPT --> EXT_LLM[LLM: extract document content]
+        EXT_LLM --> EXT_VALIDATE[Validate structured extraction]
+    end
+    COLLECT --> EXT_RULES
+
+    subgraph DOC_AUDIT["2. PO-level review"]
+        direction TB
+        DOC_RULES[Filter active PO-level rules] --> DOC_PROMPT[Add rules to PO-level prompt]
+        DOC_PROMPT --> DOC_LLM[LLM: review overall PO terms]
+        DOC_LLM --> DOC_VALIDATE[Validate results and identify relevant evidence]
+    end
+    EXT_VALIDATE --> DOC_RULES
+
+    subgraph ITEM_AUDIT["3. Line-item review"]
+        direction TB
+        ITEM_RULES[Filter active line-item rules] --> ITEM_PROMPT[Add rules to line-item prompt]
+        ITEM_PROMPT --> ITEM_LLM[LLM: compare PO items with evidence]
+        ITEM_LLM --> ITEM_VALIDATE[Validate structured results]
+    end
+    DOC_VALIDATE --> ITEM_RULES
+
+    ITEM_VALIDATE --> REPORT[Build summary and detailed report]
+    REPORT --> REVIEW[Approver reviews findings and source evidence]
+    REVIEW --> DECISION[Human makes the final decision]
+    DECISION --> FINISH((End))
+
+    FEEDBACK[Human-maintained feedback rule register] -.-> EXT_RULES
+    FEEDBACK -.-> DOC_RULES
+    FEEDBACK -.-> ITEM_RULES
+
+    classDef human fill:#FFF7E8,stroke:#D97706,stroke-width:2.5px,color:#222222
+    classDef bot fill:#EFF6FF,stroke:#2563EB,stroke-width:2.5px,color:#222222
+    classDef boundary fill:#F3F4F6,stroke:#6B7280,stroke-width:2px,color:#222222
+    class BEGIN,REVIEW,DECISION,FEEDBACK human
+    class COLLECT,EXT_RULES,EXT_PROMPT,EXT_LLM,EXT_VALIDATE,DOC_RULES,DOC_PROMPT,DOC_LLM,DOC_VALIDATE,ITEM_RULES,ITEM_PROMPT,ITEM_LLM,ITEM_VALIDATE,REPORT bot
+    class START,FINISH boundary
 ```
 
-## Solution Overview
+**Legend:** Orange outline = human action or human-maintained input; blue outline = automated step; gray outline = process boundary.
 
-The workflow separates collection, AI-assisted analysis, and reporting:
+| Stage | What happens | Result passed forward |
+|---|---|---|
+| Document extraction | Apply active extraction rules; extract information from supported PDF/image attachments. | Structured document summary and line items. |
+| PO-level review | Apply matching active rules; review overall terms such as payment terms and warranty, and identify relevant evidence. | PO-level checks and selected evidence context. |
+| Line-item review | Apply matching active rules; compare PO line items with the selected evidence. | Item-level checks and comparison details. |
 
-1. **Collect:** A browser automation workflow retrieves pending PO details and downloads associated documents.
-2. **Extract:** Gemini processes supported PDF and image attachments into typed document and line-item data.
-3. **Audit:** Separate price- and item-review stages compare extracted evidence with PO data. Evidence selected during the price review can inform the subsequent item review.
-4. **Report:** Results are organized into an executive summary and detailed checks, with red findings prioritized and source files recorded where available.
-5. **Decide:** The approver reviews the report and supporting evidence, then makes the final decision.
+During workflow setup, active feedback rules are filtered by category and added to the corresponding prompt. Each LLM action receives only the guidance relevant to its category. The workflow then assembles the stage results into one report.
 
-### High-level architecture
+## Business Value and Evidence
 
-```mermaid
-flowchart TB
-    U[Approver / User] -->|Starts review| O[Python workflow orchestration]
-    O -->|Read pending records and attachments| P[Procurement system]
-    P --> O
-    O -->|Documents and PO data| L[Gemini + Instructor]
-    L -->|Pydantic-validated extraction and audit results| O
-    O -->|Summary and detailed evidence report| R[Review report]
-    R --> U
-    U -->|Curated exception feedback| F[Rule register]
-    F -->|Active rules routed by category| L
-    U -->|Final approval decision| D[Business process]
-```
+The design is intended to reduce repetitive document searching and give the approver a more consistent, traceable first-pass review. The report brings together review status, differences, comments, and source-document references. This helps the user move from a batch-level overview to the specific evidence behind a potential exception.
 
-## LLM Harness: Constrain the Output, Keep the Decision Human
+**What has been observed:** 290 workflow runs in the first six months, typically processing 1–4 POs per run; the user said the report was helpful.
 
-A central engineering goal was to make model responses more predictable and usable by downstream code—not to claim that a schema can make an LLM infallible.
+**What has not been established:** There is no before/after cycle-time study, measured accuracy or false-positive rate, or validated financial benefit. Usage demonstrates adoption, not quantified value realization.
 
-- **Pydantic response models** define required fields and allowed status values for extraction and audit results.
-- **Instructor** requests model responses in those Pydantic-defined shapes.
-- **Validators and normalization** handle selected missing or inconsistent values before report generation.
-- **Application-owned report assembly** converts named checks into report rows, rather than asking the model to invent report structure.
-- **Evidence and human review** remain essential: valid JSON and field types do not prove that an AI conclusion is factually correct.
+### Measures for a future improvement phase
 
-The following is an **illustrative, anonymized example**, not copied production code:
+If the process owner wanted to quantify value, I would agree on definitions and data ownership first, then establish a baseline and track measures such as:
+
+| Candidate measure | Example definition |
+|---|---|
+| Review cycle time | Time from run start to report availability; separately, report availability to human decision when timestamps exist. |
+| Adoption and throughput | Run frequency and number of POs reviewed per run. |
+| Finding quality | Share of AI-flagged checks confirmed, corrected, or dismissed by the human reviewer. |
+| Evidence coverage | Share of reviewed POs with required checks and traceable source evidence. |
+
+These are proposed measures—not metrics currently captured or results achieved.
+
+## Exception Feedback: Governed Prompt Updates
+
+After launch, recurring business exceptions led to repeated prompt edits. I designed a lightweight alternative: keep stable prompt content separate from a rule register, then use category and status to determine which reviewed guidance is supplied to each LLM step.
+
+At workflow setup, the program loads the feedback rules, includes only rules marked **Active**, and routes them by category to document extraction, PO-level review, or line-item review. **Draft** rules remain out of the prompts. The mechanism is human-curated; it does not automatically learn from arbitrary feedback.
+
+### Synthetic example of the rule register
+
+The examples below are fictional and illustrate the management design only; they are not copied from real feedback or business rules.
+
+| Category | User feedback *(synthetic)* | Curated prompt rule *(synthetic)* | Status |
+|---|---|---|---|
+| Document extraction | “The scan is faint. Please do not guess unreadable values.” | Mark values that cannot be read confidently as unavailable and surface them for human review. | 🟢 Active |
+| PO-level review | “A quote may list an optional service separately from the goods.” | Do not include a clearly optional fee in a required-total comparison unless the PO includes it. | 🟢 Active |
+| Line-item review | “The short product name differs, but the model identifier matches.” | Use an exact model identifier as matching evidence when available; flag conflicting identifiers. | 🟡 Draft |
+
+I considered vector retrieval, but the observed rule volume was small enough to include relevant active guidance directly in the prompts. This workflow does not use embeddings or vector search.
+
+## LLM Harness and Review Output
+
+The goal of the LLM harness is to make responses more predictable and usable by downstream code—not to claim that schema validation prevents hallucinations or guarantees correct decisions.
+
+- **Pydantic** models define required fields, nested audit checkpoints, and permitted status values.
+- **Instructor** requests responses using those models.
+- Validators normalize selected values, while application code assembles report rows from named checkpoints.
+- Evidence references and human review provide context that a valid structure alone cannot establish.
+
+Illustrative example only; this is not production code:
 
 ```python
 from typing import Literal
@@ -104,7 +174,6 @@ class AuditReport(BaseModel):
     checkpoints: list[Checkpoint] = Field(min_length=1)
 
 
-# `instructor_client` is an already-configured Instructor client.
 report = instructor_client.chat.completions.create(
     model="configured-model",
     response_model=AuditReport,
@@ -112,67 +181,42 @@ report = instructor_client.chat.completions.create(
 )
 ```
 
-This contract helps reject responses that do not conform to the expected structure. It does **not** validate whether the model interpreted a document correctly or whether a comparison is substantively right; those require evidence checks and human judgment.
+### Synthetic example of the generated report
 
-## Feedback Loop for Recurring Edge Cases
+All identifiers, values, comments, and filenames below are invented for illustration. Green summary fields are intentionally blank; red summaries show the compared values directly.
 
-### The problem I addressed
+#### Summary view
 
-After the initial release, users continued to encounter exceptions that the model did not handle consistently. Updating a fixed system prompt for every new case would make routine maintenance slow and difficult to govern.
+| PO record *(synthetic)* | Workflow status | PO-level review | PO-level summary | Line-item review | Line-item summary | Source evidence *(synthetic)* |
+|---|---|---|---|---|---|---|
+| PO-DEMO-001 | 🟡 Pending human review | 🟢 |  | 🔴 | Item 2 tax rate: PO 8% vs. attachment 10%. | demo-quote-revB.pdf |
+| PO-DEMO-002 | 🟡 Pending human review | 🔴 | Payment terms: PO Net 30 vs. attachment Net 45. | 🟢 |  | demo-quote-v2.pdf |
 
-### The design
+#### Detailed comparison view
 
-I designed and implemented a lightweight, human-curated prompt update mechanism:
+| PO *(synthetic)* | Review level | Checkpoint | PO value | Document value | Result | Reviewer note | Source evidence *(synthetic)* |
+|---|---|---|---|---|---|---|---|
+| PO-DEMO-001 | Line item | Tax rate — Item 2 | 8% | 10% | 🔴 Difference | Confirm the applicable treatment against the source document. | demo-quote-revB.pdf |
+| PO-DEMO-001 | Line item | Item description — Item 1 | Standard adapter kit | Adapter kit, standard | 🟢 Match | Description is consistent; wording order differs. | demo-quote-revB.pdf |
+| PO-DEMO-002 | PO-level | Payment terms | Net 30 | Net 45 | 🔴 Difference | Review the terms and any later supporting evidence. | demo-quote-v2.pdf |
+| PO-DEMO-002 | PO-level | Warranty period | 12 months | 12 months | 🟢 Match | Values agree in the cited document. | demo-quote-v2.pdf |
 
-1. Keep stable system-prompt content separate from the exception-rule register.
-2. Record a proposed handling note with a review status and an audit category.
-3. At runtime, select only rules marked active and relevant to the current audit category.
-4. Add the selected rules to the corresponding prompt before the extraction or audit step.
-5. Review subsequent output with the usual evidence and human-approval controls.
+The intended review sequence is: scan the summary, inspect red findings in the detailed view, follow the source reference, and make the final decision. A green result is not an approval; a red result may also need contextual review because the model can be overly strict.
 
-This creates a **curated feedback loop**: recurring user feedback can become reusable guidance after it has been reviewed and categorized. It is not autonomous learning, and it does not automatically turn arbitrary feedback into a trusted rule.
+## My Role and Technology
 
-I considered retrieval-based approaches such as vector search, but the observed rule volume was small enough to include relevant active guidance directly in the prompt. This kept the solution simpler and easier to operate for the use case at hand.
+### My role
 
-## My Contribution
+- **Initial delivery:** The business requirements and high-level concept had already been established by my manager. I translated that direction into a working implementation and supported testing, acceptance, and deployment.
+- **Post-launch improvement:** I identified the recurring exception-management problem, proposed the categorized and status-controlled prompt mechanism to the project PM, and independently completed its design, implementation, and deployment.
 
-### Phase 1 — Initial delivery
+### Technology used
 
-The initial business requirements and high-level concept had already been established by my manager. I translated that direction into a working implementation and handled the technical follow-through, including testing, acceptance support, and deployment.
+Python · Playwright · Google Gemini (`google-genai`) · Instructor · Pydantic · Google Sheets
 
-### Phase 2 — Post-launch improvement
+## Scope, Limitations, and Privacy
 
-After deployment, I identified a recurring operational pattern: new edge cases led to repeated prompt edits. I independently conceived, designed, and implemented the categorized, status-controlled prompt-injection mechanism described above. I reviewed the approach with the project PM before proceeding, then completed the implementation and deployment.
-
-This second phase expanded my role from implementation into problem framing, solution design, trade-off evaluation, stakeholder alignment, and delivery.
-
-## Technology
-
-| Area | Technologies / approach |
-|---|---|
-| Workflow implementation | Python, asynchronous processing |
-| Browser-based data collection | Playwright |
-| Document extraction and review | Google Gemini via `google-genai` |
-| Structured LLM integration | Instructor, Pydantic |
-| Configuration, curated rules, and reports | Google Sheets |
-| Reliability support | Retry handling, logging, desktop distribution |
-
-## Outcomes and Limitations
-
-### Observed outcomes
-
-- The deployed workflow was used regularly for batches of pending POs, based on the observed cadence above.
-- The end user shared that the report was helpful as a first-pass review aid.
-- Recurring exceptions could be handled through categorized, active rules without editing the fixed system prompt for every case.
-
-### What this does not claim
-
-- No before/after time study, measured error-rate improvement, or ROI analysis was available.
-- Structured output does not eliminate hallucinations or guarantee correct interpretation.
-- AI status indicators are recommendations for review, not authorization to approve or reject a PO.
-- A human approver reviews the findings and evidence and retains the final decision.
-- The feedback mechanism is human-curated; it is not an autonomous learning system or a vector-search/RAG implementation.
-
-## Portfolio and Confidentiality Note
-
-This case study is intentionally anonymized. Company names, system identifiers, real prompts, credentials, transaction data, and proprietary business rules are omitted. The code sample above is newly written for illustration and does not reproduce production code. Technical and workflow details are generalized for portfolio discussion.
+- This is an AI-assisted PO review workflow, not an autonomous approval system or an end-to-end process-mining implementation.
+- It does not claim measured cycle-time savings, error-rate improvement, or ROI.
+- Structured outputs improve consistency of format; they do not guarantee factual correctness. Human review remains necessary.
+- This portfolio case is anonymized. Company names, internal system identifiers, credentials, real prompts, transaction data, and proprietary rules are omitted. All examples are synthetic, and the code snippet is newly written for illustration.
