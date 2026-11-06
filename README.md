@@ -144,7 +144,12 @@ The examples below are fictional and illustrate the management design only; they
 | PO-level review | “A quote may list an optional service separately from the goods.” | Do not include a clearly optional fee in a required-total comparison unless the PO includes it. | 🟢 Active |
 | Line-item review | “The short product name differs, but the model identifier matches.” | Use an exact model identifier as matching evidence when available; flag conflicting identifiers. | Draft |
 
-I considered vector retrieval, but the observed rule volume was small enough to include relevant active guidance directly in the prompts. This workflow does not use embeddings or vector search.
+#### Design Justification & Future Scalability
+
+While vector retrieval (RAG) was thoroughly considered, the current rule volume is small enough to efficiently embed all active guidance directly into the prompts. Moving forward without embeddings or vector search keeps the current pipeline lightweight and cost-effective. 
+
+However, the core data architecture is deliberately built with future scalability in mind. The structured format of the rule register ensures that if the dataset grows, the workflow is forward-compatible and can seamlessly transition into a full RAG or vector-based search system without requiring a structural overhaul.
+
 
 ## LLM Harness and Review Output
 
